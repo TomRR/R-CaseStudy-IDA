@@ -1,0 +1,164 @@
+---
+title: "Allgemeine Aufgabe 26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+
+Wie in unsere Hauptskript müssen wir die Libraries bereiten. Hier benutzen wir die Folgende:
+
+<ul>
+  <li>readr</li>
+  <li>lubridate</li>
+  <li>dplyr</li>
+  <li>ggplot2</li>
+</ul>
+
+```{r echo = FALSE, message = FALSE}
+#Sichern, dass StringsAsFactors gleich FALSE
+options(stringsAsFactors = F)
+
+# Überprüfen, ob die Packages bereits installiert sind
+if(!require(readr)){
+  # wenn es nicht installiert ist, wird es nun installiert
+  install.packages("readr", dependencies = TRUE)
+}
+library(readr)
+
+#Und so weiter
+if(!require(lubridate)){
+  # wenn es nicht installiert ist, wird es nun installiert
+  install.packages("lubridate", dependencies = TRUE)
+}
+library(lubridate)
+if(!require(dplyr)){
+  # wenn es nicht installiert ist, wird es nun installiert
+  install.packages("dplyr", dependencies = TRUE)
+}
+library(dplyr)
+if(!require(ggplot2)){
+  # wenn es nicht installiert ist, wird es nun installiert
+  install.packages("ggplot2", dependencies = TRUE)
+}
+library(ggplot2)
+```
+
+# Aufgabe 1
+
+Hier bereiten wir die geeignete Daten.
+
+```{r message=FALSE, warning=FALSE}
+#Importieren und reinigen die relevante Datensätze
+K7 <- read_csv2("Data/Logistikverzug/Komponente_K7.csv") %>% select(2:6)
+K7$Fehlerhaft <- as.logical(K7$Fehlerhaft)
+names(K7)[5] <- "Vor-Fehlerhaft"
+
+LK7 <- read_csv2("Data/Logistikverzug/Logistikverzug_K7.csv") %>% select(2:6)
+LK7$Fehlerhaft <- as.logical(LK7$Fehlerhaft)
+LK7$Wareneingang <- dmy(LK7$Wareneingang)
+names(LK7)[5] <- "Nach-Fehlerhaft"
+
+#Kombinieren um die Analyse zu bereiten
+komp7 <- merge(K7, LK7, by=c('IDNummer', 'Herstellernummer', 'Werksnummer'))
+rm(K7, LK7)
+
+#Berechnung der vergangenen Zeit zwischen Warenausgang und Wareneingang
+Tage_inzwischen <- komp7$Wareneingang - komp7$Produktionsdatum
+Tage_inzwischen <- as.integer(Tage_inzwischen)
+
+#Fügen diese Berechnung dem Datensatz hinzu
+komp7 <- cbind(komp7, Tage_inzwischen)
+rm(Tage_inzwischen)
+```
+
+###1a: Wie ist der Logistikverzug verteilt?
+Der Logistikverzug ist linksteil normalverteilt. Die Verteilung ist linksteil, weil das Vorgehen nur so schnell gehen kann. Weniger als einige Tage ist es nicht erreichbar. Die Verteilung ist an 1d ansichtbar.
+
+###1b Wie viel Zeit vergeht mindestens/höchstens zwischen Warenausgang und Wareneingang?
+```{r}
+#Mindestens (Tage):
+min <- min(komp7$Tage_inzwischen)
+min
+
+#Höchstens (Tage):
+max <- max(komp7$Tage_inzwischen)
+max
+```
+
+###1c Bestimmen Sie den Mittelwert des Logistikverzugs.
+```{r}
+#Mittelwert (Tage):
+mean <- mean(komp7$Tage_inzwischen)
+mean
+```
+
+###1d Stellen Sie die Verteilung in geeigneter Weise dar.
+```{r}
+ggplot(komp7, aes(x=komp7$Tage_inzwischen)) + geom_histogram(binwidth=.5)
+```
+
+#Aufgabe 2
+###Warum ist es sinnvoll, die Ihnen bereitgestellten Daten in separaten Dateien abzulegen und nicht alles in einer riesigen Tabelle abzuspeichern? Wie nennt sich das zugrunde liegende Datenbankkonzept?
+
+Das zugrunde liegende Datenbankonzept heißt 'Relational Database Management System' (RDBMS). Mithilfe des RDBMS ist es möglich, relationale Datenbanken und die zugehörigen Daten zu erstellen, zu pflegen und zu administrieren. Hierzu werden die Datein separat gespeichert und strukturiert untereinander kombiniert. Hierfür ist es nötig die Daten in eine normalisierte Form zu bringen und komplexe Datenobjekte so zu zerlegen, damit die in Beziehung zu einander stehen. 
+
+Ein großer Vorteil des RDBMS ist das ausgereiftes und zuverlässiges System zur Datenspeicherung. Es gibt eine redundanzfreie und konsistente Datenspeicherung und das Abfragen der Daten nach verschiedensten Kritierein ist möglich. Getrennt gespeicherte Daten erhöhen auch die Sicherheit des vollständigen Datensatzes. 
+
+#Aufgabe 3
+###Wie viele der Komponenten K7 landeten in Fahrzeugen, die in Dortmund zugelassen wurden?
+
+Komponente K7 gilt nur in Fahrzeuge des Typs 22. Hier wird den Datensatz davon bereitet, und die Zulassungsdaten hinzugefügt.
+```{r, warning = FALSE, message = FALSE}
+BOT22 <- read_csv2("Data/Fahrzeug/Bestandteile_Fahrzeuge_OEM2_Typ22.csv") %>% select(2:6)
+zulassungen<-read_csv2("Data/Zulassungen/Zulassungen_alle_Fahrzeuge.csv") %>% select(2:4)
+names(zulassungen)[1]<-"ID_Fahrzeug"
+BOT22 <- left_join(BOT22, zulassungen, by = "ID_Fahrzeug")
+```
+
+Die Nummer der Fahrzeuge aus Dortmund:
+```{r}
+nrow(filter(BOT22, Gemeinden == "DORTMUND"))
+```
+
+#Aufgabe 4
+###Welche Datentypen haben die Attribute der Zulassungstabelle „Zulassungen_aller_Fahrzeuge“?
+
+Die Datentypen der Zulassungstabelle sind durch die str() Funktion sichtbar.
+```{r}
+str(zulassungen)
+```
+
+#Aufgabe 5
+###Warum ist es gerade dann sinnvoll die Datensätze auf der Datenbank eines Servers abzulegen? Warum können Sie die Datensätze nicht auf Ihrem persönlichen Computer ablegen?
+
+Die zu veröffentliche Applikation benötigt dauernden zugriff auf die Datensätze. Sollen diese auf einen persönlichen Computer liegen, welcher nicht immer angeschaltet ist bzw. nicht dauerhaft ans Internet angeschlossen ist, könnte die Applikation nicht auf die gewünschten Daten zugreifen und diese ordnungsgemäß ausführen.
+
+Dies kann umgangen werden, indem die Datensätze auf einer Datenbank eines Servers gespeichert werden. Dieser ist im Dauerbetrieb und hat eine ständige Verbindung zum Internet, sodass zu jedem Zeitpunkt auf die Daten zugegriffen werden und die Applikation ausgeführt werden kann.
+
+Alternativ ist es möglich seinen persönlichen PC selbst als Server zu nutzen. Dies sollte aber gut überlegt werden da nicht alle Hardware für den Dauerbetrieb geeignet ist und die Stromkosten je nach System auch nicht zu vernachlässigen sind.
+
+Es ist auch aus Sicherheitsgründen zum Vorteil die Daten extern zu speichern. Es wird weniger Rechnerleistung in anspruch genommen und der Datensatz ist dadurch nicht mehr so anfällig für fehler. 
+
+#Aufgabe 6
+###Am 11.08.2010 hat es einen Unfall mit einem Fahrzeug des OEM gegeben. Von dem Kennzeichen des Unfallwagens fehlt jede Spur. Die Polizei bittet Sie um Hilfe, da Sie für das Kraftfahrtbundesamt arbeiten und fragt, wo das Fahrzeug mit der Motorkennziffer „K1BE2-104-1041-32050“ (entspricht der Motor-ID-Nummer) zugelassen wurde.
+
+Um das Fahrzeug mit der gegebenen Motor-ID zu finden, werden alle Motoren-, Fahrzeuge-, und Gemeindendaten zusammengestellt.
+```{r}
+b11 <- read_csv2("Data/Fahrzeug/Bestandteile_Fahrzeuge_OEM1_Typ11.csv") %>% select(5:6)
+b12 <- read_csv2("Data/Fahrzeug/Bestandteile_Fahrzeuge_OEM1_Typ12.csv") %>% select(5:6)
+b21 <- read_csv2("Data/Fahrzeug/Bestandteile_Fahrzeuge_OEM2_Typ21.csv") %>% select(5:6)
+b22 <- read_csv2("Data/Fahrzeug/Bestandteile_Fahrzeuge_OEM2_Typ22.csv") %>% select(5:6)
+PolizeiDatenSatz <- rbind(b11, b12, b21, b22) %>% left_join(zulassungen, by = 'ID_Fahrzeug')
+rm(b11, b12, b21, b22)
+```
+Dann wird das gewünschte Fahrzeug ausgewählt.
+```{r}
+UnfallWagen <- filter(PolizeiDatenSatz, ID_Motor == "K1BE2-104-1041-32050")
+UnfallWagen$Gemeinden
+```
+
+

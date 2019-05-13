@@ -1,0 +1,637 @@
+---
+title: "Case Study"
+author: "Zachary Miller (403812), Jonas Nickel (383318), Tom-Robert Resing (349926), Antony Roczek (398956), Alaeddine Tmar (341639), Andre Weigel (399148)"
+date: "31.03.2019"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+# Case Study for Introduction to Engineering Data Analytics with R
+
+## 1. Laden der benötigten Packages
+
+Für eine bessere Übersicht sind alle von uns verwendeten Packages in der _libraries.R_ File enthalten.
+Mithilfe von `pacman` werden die Packages geladen, und falls nötig installiert.
+Dies erfolgt mit dem Befehl:
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(prettydoc, plotly, lubridate,stats,data.table,readr,dplyr,tidyr,readtext,kableExtra,shinydashboard,shinyjs,shiny)
+
+```
+<!-- Hilfsfunktionen -->
+## 2. Genutzte Hilfsfunktionen
+
+Für den Import und das Vorbereiten für die Analyse der Daten haben wir Hilfs-Funktionen geschrieben. In diesen Abschnitt wird erklärt, wie die Funktionen  funktionieren.
+
+
+Zu Beginn wird `stringsAsFactors` global auf `FALSE` gesetzt.
+```{r}
+options(stringsAsFactors = F)
+```
+Dadurch wird verhindert, das Strings versehentlich in Faktoren umgewandelt werden, was zu Komplikationen führen kann.
+
+Um die Funktionen verständlich zu machen werden sie zuerst als Ganzes gezeigt und anschließend Zeile für Zeile erklärt.
+
+### Die import_txt() - Funktion
+
+Diese Funktion dient dazu die _.txt_ Dateien einzulesen und für das spätere Tidying vorzubereiten.
+Das Hauptproblem der _.txt_ Dateien lag darin, dass alle Einträge in eine Spalte geschrieben wurden.
+
+Die Funktion sieht wie folgt aus:
+
+
+```{r}
+import_txt<- function(filename,sepcol,sepline) {
+
+  con <- file(filename, open = "r")
+  lines <- readLines(con)
+  l<-strsplit(lines[[1]],split = sepline)
+  l<-unlist(l)
+  l<-as.data.frame(l)
+  c<-l[1,1]
+  c<- as.character(c)
+  s<-strsplit(c,split=sepcol)
+  s<-unlist(s)
+  s<-gsub("\"","",s)
+  s<-c("A",s)
+  df<- l %>% separate(l,into=s,sep = sepcol)
+  df<-df[-1,]
+  return(df)
+}
+```
+
+
+Unsere Funktion soll drei Variablen annehmen. Der Pfad des zu importierenden Files (`filename`), das Zeichen, welches signalisiert wie die Spalten getrennt werden (`sepcol`), sowie das Zeichen, welches signalisiert, dass hier die Line einen Break machen soll (`sepline`).
+
+In der ersten Zeile der Funktion wird der `"filename"` der _.txt Datei_ in der Variablen `con` mit den zusätzlichen Ausdruck `open = r`, wobei das `r` für "read" steht, gespeichert.
+Die Variable `con` wird anschließend in der Funktion `readLines()` in die Variable `lines` gespeichert. `readLines` speichert den gesamten Inhalt der gewählten _.txt Datei_ als großen Character.
+Um den Character nun in eine analysierbare Form umzuwandeln, wird `lines` mittels der `strsplit()` Funktion an der Stelle des Zeilenseparators `sepline` getrennt und in `l` gespeichert. 
+`l` ist nun eine Liste und wird mit `unlist()` wieder in einen Character umgewandelt. Anschließend übergeben wir `l` noch einmal an die Funktion `as.data.frame()` und speichern es erneut in `l`. Nach diesem Schritt erhalten wir `l` als Dataframe.
+
+Die erste Zeile von `l` enthält unsere Spaltennamen, die in der Variablen `c` mit dem Befehl `l[1,1]` gespeichert werden.
+Um sicher zu stellen, dass `c` als Character gespeichert wird, wenden wir `as.character(c)` an. Das ist für den weiteren Verlauf notwendig, da es zu Fehlern kommen kann, wenn `c` kein Character ist.
+Nun werden alle Werte in einzelne Zellenüberführt, beginnend mit den Spaltennamen.
+Dafür wird wieder die Funktion `strsplit()` genutzt.
+Es wird der Inhalt des Character `c` Übergeben, welcher an der Stelle `sepcol` getrennt werden soll und dann in `s` gespeichert. Um ungewollte Fehler zu vermeiden, wird auf `c` wieder die `unlist()`- Funktion angewendet.
+
+Jetzt werden mit `gsub()` die überschüssigen Symbole entfernt.
+Zuerst haben wir die überschüssigen Anführungszeichen aus `s` entfernt. Dabei musste beachtet werden, das vor den zu entfernenden Symbol ein Backslash gesetzt werden muss, da ansonsten `"` nicht erkannt wird und das Ergebnis falsch ist.
+Somit ist `\"` unser zu ersetzendes Zeichen und wieder in `s` gespeichert. Danach übergeben wir `s` eine zusätzlichen Namen `A` für die namenlose laufende Nummerierung am Anfang. Dies geschieht mit `c("A",s)`.
+Zum Schluss wird `l` gemäß der einzelnen Spaltennamen, welche der Inhalt des Vektors `s` sind, in Spalten getrennt und in `df` gespeichert. Abschließend entfernen wir noch die überschüssige erste Zeile aus `df` mit `df[-1,]` und erhalten so unseren fertigen Dataframe. Dieser wird mit `return(df)` von der Funktion `import_txt()` ausgegeben.
+
+
+
+### Die import_werk() - Funktion
+
+Die Dateien aus dem Geodaten - Ordner erfordern auch eine Funktion, um in eine angemessenen Form für eine spätere Analyse gebracht zu werden.
+Die dafür geschriebene Funktion heißt _import_werk_.
+Die gesamte Funktion ist folgende:
+
+
+```{r}
+#importing werk with extra symbols
+import_werk<-function(filename){
+
+  con <- file(filename, open = "r")
+  lines <- readLines(con)
+  lines<-gsub("\x84","ae",lines)
+  lines<-unlist(lines)
+  l<-as.data.frame(lines)
+  write.csv(l,"Data/Geodaten/Werk.csv",row.names = F)
+  werk<-fread("Data/Geodaten/Werk.csv",quote="")
+  werk<-werk[,1:5]
+  names(werk) = c("PLZ",names(werk)[2:4],"Laengengrad")
+  werk$PLZ<-gsub("\"","",werk$PLZ)
+  werk$Laengengrad<-gsub("\"","",werk$Laengengrad)
+  werk$PLZ<-as.integer(werk$PLZ)
+  werk$Laengengrad<-as.numeric(werk$Laengengrad)
+  werk$Breitengrad<-as.numeric(werk$Breitengrad)
+  werk$Werk<-gsub("O","",werk$Werk)
+  werk$Werk<-as.integer(werk$Werk)
+  return(werk)
+}
+```
+
+Der Funktion wird, anders als bei `import_txt`, nur eine Variable übergeben (`filename`). Diese ist, Analog zu der `import_txt` Variable, der Pfad der zu importierenden Datei.
+Ebenfalls wie bei der `import_txt` Funktion wird im zuerst mit der Funktion `file()` der `filename` in der Variable `con` gespeichert. Auch hier wird anschließend mit `readLines()` der Inhalt von `con` in Zeilen übergeben und so alle Zeichen der Datei als großer Charakter in `lines` gespeichert.
+
+In `lines` wird daraufhin mit der `gsub()` - Funktion das Zeichen `x84`, welches `.` in ASCII darstellt,  durch ein `ae` ersetzt, um für eine besseren Les- & Analysierbarkeit zu sorgen. Auch hier muss wieder beachtet werden, dass vor `x84` ein Backslash gesetzt wird, damit die Funktion das gewünschte Ergebnis erzielt. Auch `lines` muss mit der `unlist()`-Funktion wieder umgewandelt werden, damit dieses anschließend mit der `as.data.frame()` Funktion in ein Dataframe umgewandelt und in `l` abgespeichert werden kann.
+Nun wird der neue Dataframe `l` in `Werk.csv` gespeichert und anschließend mit der `fread()` Import-Funktion in Korrigierter Form neu eingelesen und in `werk` gespeichert.
+
+
+Anschließend werden die relevanten Spalten aus `werk_` mit `[, 1:5]` ausgewählt neu in `werk` gespeichert. In den nächsten Schritten wird der Dataframe weiter gesäubert und für die Analyse vorbereitet.
+Dafür werden erst die Spaltennamen korigiert, indem die erste Spalte den Namen `PLZ` erhält, Spalte 2 bis 4 gleich bleiben und die 5. den Namen "Laengengrad" erhält. Danach wird das Überschüssige Ausrufezeichen der "PLZ" und "Laengengrad" Spalte mit `gsub()` beseitigt.
+
+### Die clean() - Funktion
+
+Um unsere Datensätze für die Analyse vorzubereiten, und redundanten Code zu verhindern, wurde die `clean()` - Funktion geschrieben.
+Die vollständige Funktion ist hier zu sehen:
+
+
+```{r}
+# cleaning function
+clean<-function(df){
+
+  names(df)<-gsub("Produktionsdatum_Origin_01011970","Produktionsdatum",names(df))   
+  df<-select(df,ID,`Fehlerhaft_Datum`,`Fehlerhaft_Fahrleistung`,Produktionsdatum,Herstellernummer,Werksnummer,Fehlerhaft)
+  df$ID<-as.character(df$ID)
+  df$ID<-gsub("\"","",df$ID) 
+  df$Herstellernummer<-gsub("\"","",df$Herstellernummer)
+  df$Werksnummer<-gsub("\"","",df$Werksnummer) 
+  df$Herstellernummer<-as.integer(df$Herstellernummer) 
+  df$Werksnummer<-as.integer(df$Werksnummer)
+  df$Fehlerhaft_Fahrleistung<-as.numeric(df$Fehlerhaft_Fahrleistung) 
+  df$Fehlerhaft_Fahrleistung<-abs(df$Fehlerhaft_Fahrleistung)
+  if(any(grepl("-",df$Produktionsdatum))==TRUE){
+    df$Produktionsdatum<-ymd(df$Produktionsdatum)  
+  } else{
+    df$Produktionsdatum<-as.numeric(df$Produktionsdatum) 
+    df$Produktionsdatum<-as.Date.numeric(df$Produktionsdatum,origin = "1970-01-01")
+  }
+  df$Fehlerhaft<-as.logical(as.integer(df$Fehlerhaft)) 
+  df$Fehlerhaft_Datum<-ymd(df$Fehlerhaft_Datum) 
+  return(df)
+
+}
+```
+
+
+
+Der `clean()` - Funktion wird eine Variable, die `df` genannt wird, übergeben.
+Die Funktion beginnt damit, die Spaltennamen einheitlich zu machen, inden mit `gsub()` "Produktionsdatum_Origin_01011970" zu "Produktionsdatum" geändert wird.
+
+Danach werden die relevanten Spalten mittels `select()` ausgewählt. Diese sind für uns "ID", "Fehlerhaft_Datum", "Fehlerhaft_Fahrleistung", "Produktionsdatum", "Herstellernummer", "Werksnummer" sowie "Fehlerhaft". "ID" wird daraufhin in einen Character umgewandelt und die überschüssigen Ausrufezeichen entfernt. Bei den Spalten "Herstellernummer" sowie "Werksnummer" werden diese Ausrufezeichen ebenfalls entfernt und beide Spalten in Integer umgewandelt. 
+Die "Fehlerhafte_Fahrleisung" wird in der Datei in eine natürliche Zahl umgewandelt und anschließend zu einem Absolutwert mit `abs()` umgerechnet.
+Für die spätere Analyse ergibt ein negativer Wert an dieser Stelle wenig Sinn, weswegen es wichtig ist, diesen an dieser Stelle zu beseitigen.
+Die Folgende _if_ bedingung dient dazu, das "Produktionsdatum" in übersichtlich darzustellen.
+
+Zum Schluss der Funktion wird "Fehlerhaft" zunächst in einen Integer umgewandelt, der Einsen und Nullen enthält, und danach in einen Logical, sodass diese Werte in True oder False umgewandelt werden.
+"Fehlerhaftes_Datum" wird mit `ymd()` in ein Datum umgewandelt.
+Zum Schluss wird der fertige Datensatz `df` zurückgegeben.
+
+
+
+
+### Die prepare() - Funktion
+
+Diese Hilfsfunktion dient zur Vorbereitung der Daten für die Auswertungen.
+Die gesamte Funktion ist wie folgt aufgebaut:
+
+
+```{r}
+prepare<-function(df1,datum,leistung){    
+  df<- df1 %>% filter(Fehlerhaft==T) %>%   
+    mutate(Lebensdauer=Fehlerhaft_Datum, Produktionsdatum) %>%   
+    select(ID,Fehlerhaft_Datum,Werksnummer,Fehlerhaft_Fahrleistung,Lebensdauer) %>%  
+    filter(Fehlerhaft_Datum >= datum,Fehlerhaft_Fahrleistung<=leistung) %>% 
+    arrange(Fehlerhaft_Datum) 
+  return(df)
+}
+```
+
+
+Der Funktion werden drei Variablen übergeben. 
+`df1` ist die vorzubereitende Datei oder der Dateipfad, `datum` das zu wählende Datum und `leistung` die berechnete Leistung. In den Body der Funktion werden Funktionen mit Hilfe von Pipes aneinander gereiht. Zu Beginn wird der Datensatz `df1` mit der `filter()` - Funktion gefiltert, sodass nur die Werte übergeben werden, bei denen Fehler aufgetreten sind. Anschließend wird der Spaltenname "Fehlerhaft_Datum_Produktionsdatum" in "Lebensdauer" umgeändert, da die Lebensdauer der Bauteile im späteren verlauf berechnet wird. Danach erfolgt das Auswählen der relevanten Spalten mittels `select`, welche in unseren Fall "ID", "Fehlerhaft_Datum", "Werksnummer", "Fehlerhaft_Fahrleistung" und "Lebensdauer" sind. Zum Schluss werden noch die Rahmenbedingungen, ebenfalls mit der`filter()` - Funktion, hinzugefügt, also "Fehlerhaft_Datum" soll >= "datum" und "Fehlerhaft_Fahrleistung" <= "leistung" sein und der erhaltende Datensatz mittels `arrange()` nach den Werten der "Fehlerhaft_Datum" aufsteigend sortiert werden.
+Das Ergebnis wird in `df` gespeicher und Übergeben.
+
+
+
+<!-- Import und Bereinigung der Datensätze -->
+
+##3. Import und Bereinigung der Datensätze
+
+In diesen Abschnitt wird beschrieben, wie die relevanten Datensätze geladen und für die Analyse gesäubert werden.
+
+### Einzelteile
+
+#### Import Einzelteile K2L1
+
+Die relevanten Einzelteile für die Komponente K2L1 sind die Datensätze `Einzelteil_T11.txt`, `Einzelteil_T14.csv` sowie `Einzelteil_Einzelteil_T15.csv`.
+
+##### Einzelteil_T14
+
+Zum Einlesen der Daten von `Einzelteil_T14.csv` konnte die Funktion `read.cvs2` genutzt werden. Diese Funktion hat die für uns relevanten Standardwerte `header = TRUE` und `sep = ";"`. Somit ergibt sich folgender Import-Befehl:
+
+
+```{r}
+Einzelteil_T14 <- read.csv2("Data/Einzelteil/Einzelteil_T14.csv")
+head(Einzelteil_T14)
+```
+
+Anschließend werden die Kommatas aus der Spalte "Fehlerhaft_Fahrleistung" mit Hilfe der `gsub()` - Funktion durch Punkte ersetzt, sodass eine spätere Konvertierung zu Numeric's durch die `clean()` - Funktion möglich ist.
+
+
+```{r}
+Einzelteil_T14$Fehlerhaft_Fahrleistung<-gsub(",",".",Einzelteil_T14$Fehlerhaft_Fahrleistung)
+```
+
+
+Der Spaltenname der dritten Spalte wird danach für eine konsistente Darstellung in "ID" geändert und die `Clean()` - Funktion auf den Dataframe angewandt.
+
+
+```{r}
+names(Einzelteil_T14)[3] <- "ID" 
+Einzelteil_T14 <- clean(Einzelteil_T14) 
+head(Einzelteil_T14)
+```
+
+
+
+
+##### Einzelteil_T15
+```
+Einzelteil_T15<-read.csv2("Data/Einzelteil/Einzelteil_T15.csv")  #Datei für die Informationen zum Bauteil Einzelteil_T15 einlesen
+Einzelteil_T15_1<-Einzelteil_T15[,3:9]  #Die Werte für Einzelteil_T15 sind in 2 Teil-Dataframe dargestellt, diese müssen vereinigt werden.
+Einzelteil_T15_2<-Einzelteil_T15[,10:16] #2-Teil-Dataframe
+names(Einzelteil_T15_1)<-gsub(".x","",names(Einzelteil_T15_1)) #Namen zum späteren rbind einheitlich machen 
+names(Einzelteil_T15_2)<-gsub(".y","",names(Einzelteil_T15_2)) #Namen zum späteren rbind einheitlich machen
+Einzelteil_T15<-rbind(Einzelteil_T15_1,Einzelteil_T15_2)   #2 Teil-Dataframe zusammenfügen
+Einzelteil_T15<-Einzelteil_T15[rowSums( is.na(Einzelteil_T15) ) <=1, ] #Zeilen nur mit NA Einträge beseitigen
+names(Einzelteil_T15)[1]<-"ID" #ID für weitere Zwecke (später rbind) einheitlich behalten 
+Einzelteil_T15$Fehlerhaft_Fahrleistung<-gsub(",",".",Einzelteil_T15$Fehlerhaft_Fahrleistung) #sub , to . to be able to convert as.numeric later
+Einzelteil_T15<-clean(Einzelteil_T15) #Dataframe Einzelteil_T15 mit der Funktion clean() (siehe helpers.R) saubermachen
+```
+
+`Einzelteil_T15.csv` wird wie auch `Einzelteil_T14.csv` mit der `read.csv2()` Import - Funktion eingelesen.
+Nach dem Einlesen der Datei haben wir festgestellt, dass die Werte in zwei Teil-Dataframes dargestellt werden, welche vereinigt werden müssen.
+Dazu wurden die 3. bis 9. Spalte in `Einzelteil_T15_1` und die 10. bis 16. Spalte in `Einzelteil_T15_2` gespeichert.
+Anschließend wurde von `Einzelteil_T15_1` mittels `gsub()` das _.x_ entfernt und von `Einzelteil_T15_2` das _.y_.
+Danach wird der erste Spaltenname in "ID" geändert und die Kommatas durch einen Punkt ersetzt. Dadurch ist es möglich, an dieser Stelle mit `as.number()` zu konvertieren.
+Die letzen drei Schritte bestehen daraus, unsere `clean()` - Funktion anzuwenden und alle Einträge zu filtern, in welchen _Fehlerhaft_ == _TRUE_. Der gesäuberte Dataframe wird zum Schluss in `Einzelteil_T15_tidy` gespeichert.
+Zusätzlich werden noch `Einzelteil_T15_1` und `Einzelteil_T15_2`  entfernt, um die Übersichtlichkeit des "Global Environment" zu verbessern.
+
+
+##### T11
+
+Für die `Einzelteil_T11.txt` wird wieder unsere Hilfsfunktion `import_txt` verwendet.
+
+
+```
+Einzelteil_T11 <- import_txt(filename = "Data/Einzelteil/Einzelteil_T11.txt",sepcol= "\t" ,sepline="\f")
+```
+
+
+Als nächsten Schritt wird der dritte Spaltenkopf in "ID" umbenannt. Dies wird zum späteren Zeitpunkt beim Zusammenfügen mehrerer Datensätze wichtig.
+Anschließend wird der Datensatz mit der `clean()` - Hilfsfunktion gesäubert und nach den Einträgen gefiltert, in denen _Fehlerhaft_ == _TRUE_.
+Das Ergebnis wird in `Einzelteile_T11_tidy` gespeichert.
+
+
+```
+names(Einzelteil_T11)[3] <- "ID"
+Einzelteil_T11 <- clean(Einzelteil_T11)
+Einzelteile_T11_tidy <- filter(Einzelteil_T11, Fehlerhaft==T)
+```
+
+#### Import Einzelteile K2L2
+
+Die relevanten Einzelteile für die Komponente K2L1 sind in den Datensätzen `Einzelteil_T16.txt`, `Einzelteil_T19.csv` sowie `Einzelteil_T20.csv` gespeichert und müssen importiert werden.
+
+##### T19
+
+Zum Einlesen der Datei `Einzelteil_T19.csv` wird die Funktion `read.cvs2` genutzt. Diese Funktion hat die für uns relevanten Standardwerte `header = TRUE` und `sep = ","`. Somit ergibt sich folgender Import-Befehl:
+
+
+```{r}
+Einzelteil_T19 <- read.csv("Data/Einzelteil/Einzelteil_T19.csv")
+```
+
+
+Die folgenden Schritte sind Analog zum Import des `Einzelteile_T11` Datensatzes:
+
+```{r}
+names(Einzelteil_T19)[3] <- "ID"
+Einzelteil_T19 <- clean(Einzelteil_T19)
+Einzelteile_T19_tidy <- filter(Einzelteil_T19, Fehlerhaft==T)
+```
+
+##### T16
+
+Zum Importieren der `Einzelteil_T16` Datei verwendeten wir unsere Hilfsfunktion `import_txt()` mit `sepcol = " \\| \\| "` und `sepline = "\t"`. Auffällig ist hier, dass die Werte in drei Teil-Dataframes dargestellt werden. Diese müssen vereinigt werden.
+Dafür speichern wir die Werte der Spalte 3 bis 9 in `Einzelteil_T16_x,` die der Spalten 10 bis 16 in `Einzelteile_T16_y`und die der Spalten 17 bis 23 in `Einzelteile_T16_z`.
+Zur Vorbereitung der Vereinigung der Dataframes werden anschließend die Spaltennamen von `Einzelteile_T16_z` erst in `Einzelteil_T16_x,` und anschließend in `Einzelteile_T16_y` überschrieben, sodass wir einhaltliche Spaltennamen erhalten.
+Daraufhin fügen wir die drei Dataframes zu einer zusammen und speichern diese in `Einzelteile_T16`
+
+
+```
+Einzelteil_T16 <- rbind(Einzelteil_T16.x, Einzelteil_T16.y, Einzelteil_T16.z)
+```
+
+
+Um unsere `clean()` - Funktion anwenden zu können, sind noch ein paar weitere Schritte notwendig.
+Zuerst werden die Werte der "Fehlerhaft_Fahrleistung" in natürliche Zahlen umgewandelt mit `as.numeric()`.
+
+Anschließend werden die überschüssigen Ausrufezeichen der "Herstellernummer" mit `gsub()` entfernt und der "Name" der ersten Spalte in "ID" geändert.
+Danach kann die `clean()` - Funktion angewendet werden. Zum Schluss werden die Werte mit _Fehlerhaft_ == _TRUE_ mit der `filter()` - Funktion rausgezogen und in `Einzelteile_T16_tidy` gespeichern.
+Zusätzlich haben wir uns noch entschieden, die überschüssigen Dataframes `Einzelteil_T16.x`, `Einzelteil_T16.y`, `Einzelteil_T16.z` mit `rm()` zu löschen.
+
+
+
+##### T20
+
+Das Laden von `Einzelteile_T20.txt`läuft Analog zu `Einzelteile_T11.txt` ab.
+Die einzige Ausnahme ist, dass `sepcol = " \\| \\| "` und `sepline = "\" \""` sowie der Pfad `filename = "Data/Einzelteil/Einzelteil_T20.txt"` ist.
+
+
+```
+Einzelteil_T20 <- import_txt(filename = "Data/Einzelteil/Einzelteil_T20.txt",sepcol = " \\| \\| ",sepline = "\" \"")
+```
+### Komponente
+
+#### Bestandteile
+
+Die für uns relevanten Datensätze für `Bestandteile_Komponente_...` können beide mit der Import-Funktion `read.csv2()` geladen werden.
+
+```
+Bestandteile_Komponente_K2LE1 <- read.csv2("Data/Komponente/Bestandteile_Komponente_K2LE1.csv")
+Bestandteile_Komponente_K2LE2 <- read.csv2("Data/Komponente/Bestandteile_Komponente_K2LE2.csv")
+```
+
+Nach dem Laden der Datensätze wird die unnötige laufende Nummerierung in beiden Datensätze gelöscht.
+
+```
+Bestandteile_Komponente_K2LE1 <- Bestandteile_Komponente_K2LE1[,-1]
+Bestandteile_Komponente_K2LE2 <- Bestandteile_Komponente_K2LE2[,-1]
+```
+
+##### K2LE1
+
+Um den Datensatz `Komponente_K2LE1.txt` zu laden verwenden wir unsere Hilfsfunktion `import_txt` mit den Variablen `sepcol = "II"` und `sepline ="\v"`.
+
+
+```
+Komponente_K2LE1 <- import_txt("Data/Komponente/Komponente_K2LE1.txt",sepcol = "II",sepline ="\v")
+```
+
+
+Nach dem Einlesen der Datei fällt auf, dass die Werte in zwei Teil-Dataframes dargestellt werden, welche vereinigt werden müssen.
+Dafür speichern wir die 3. bis 9. Spalte in `Komponente_K2LE1.x` und die 10. bis 16. Spalte in `Komponente_K2LE.y`.
+
+```
+Komponente_K2LE1.x <- Komponente_K2LE1[,3:9]
+Komponente_K2LE1.y <- Komponente_K2LE1[,10:16]
+```
+
+Im nächsten Schritt wird das Vereinigen der beiden Dataframes vorbereitet, inden die Spaltennamen einheitlich gemacht werden:
+
+```
+names(Komponente_K2LE1.y) <- names(Komponente_K2LE1.x)  
+```
+
+Anschließend werden die beiden Dataframes mit `rbind` vereinigt und in `Komponente_K2LE1` gespeichert;
+
+```
+Komponente_K2LE1 <- rbind(Komponente_K2LE1.x,Komponente_K2LE1.y) 
+```
+
+Nun erhalten wir ein Dataframe, welches für die Analyse noch gesäubert werden muss.
+Dafür wird zuerst ".x" entfernt mit der `gsub()` Funktion, der Spaltenname der ersten Spalte durch "ID"" ersetzt und unsere Hilfsfunktion `clean()` eingesetzt um ein Ergebniss zu erhalten, das leichter zu analysieren ist.
+
+```
+names(Komponente_K2LE1) <- gsub(".x","",names(Komponente_K2LE1)) 
+names(Komponente_K2LE1)[1] <- "ID" 
+Komponente_K2LE1 <- clean(Komponente_K2LE1) 
+```
+
+##### K2LE2
+
+Für die Komponente K2LE2 wurde die `read.delim()` Import-Funktion mit den Standardwerten `header = TRUE` und `sep = "\t"` genutzt.
+
+```
+Komponente_K2LE2 <- read.delim("Data/Komponente/Komponente_K2LE2.txt",sep="\\")
+```
+
+Anschließend wird der 2. Spaltenname durch "ID" ersetzt um die Einheitlichkeit beizubehalten und unsere Hilfsfunktion `clean()` angewendet um den Dataframe zu säubern.
+Das Ergebnis wird in `Komponente_K2LE2` gespeichert.
+
+```
+names(Komponente_K2LE2)[2] <- "ID" 
+Komponente_K2LE2 <- clean(Komponente_K2LE2) 
+```
+
+### Fahrzeuge
+
+Der Import und die Vorbereitung der Datensätze `Fahrzeuge_OEM1_Typ11`, `Fahrzeuge_OEM1_Typ12`, `Fahrzeuge_OEM1_Typ21` und `Fahrzeuge_OEM1_Typ22` für die Analyse sind sich sehr ähnlich bzw. die der `Fahrzeuge_OEM1_Typ11` und `Fahrzeuge_OEM1_Typ12` sowie `Fahrzeuge_OEM1_Typ21` und `Fahrzeuge_OEM1_Typ22` sogar gleich.
+Für den Import von `Fahrzeuge_OEM1_Typ11` und `Fahrzeuge_OEM1_Typ21` nutzten wir die Import-Funktion `read.csv()` und für `Fahrzeuge_OEM1_Typ12` und `Fahrzeuge_OEM1_Typ22` die Import-Funktion `read.csv2()`.
+
+Anschließend werden bei allen 4 Datensätze der 3. Spaltenname in "ID" geändert und mit der `clean()` - Hilfsfunktion für die Analyse vorbereitet.
+
+
+
+#### Bestandteile OEMs
+
+Das Importieren und Säubern der Datensätze `Bestandteile_Fahrzeuge_OEM1_Typ11`, `Bestandteile_Fahrzeuge_OEM1_Typ12`, `Bestandteile_Fahrzeuge_OEM1_Typ21`, `Bestandteile_Fahrzeuge_OEM1_Typ22` ist ebenfalls gleich. 
+
+Zuerst werden die Datensätze mit `read.csv2()` eingelesen und anschließend die unnötige Laufende Nummerierung der 1. Spalte gelöscht.
+Das Vorgehen wird an dem Datensatz `Bestandteile_Fahrzeuge_OEM1_Typ11` Beispielhaft gezeigt:
+
+```
+Bestandteile_Fahrzeuge_OEM1_Typ11 <- read.csv2("Data/Fahrzeug/Bestandteile_Fahrzeuge_OEM1_Typ11.csv")
+Bestandteile_Fahrzeuge_OEM1_Typ11 <- Bestandteile_Fahrzeuge_OEM1_Typ11[,-1]
+```
+
+
+
+#### Werke
+
+Die relevanten Datensätze mit den Informationen zum Werk werden alle mit der Import-Hilfsfunktion `import_werk()` eingelesen.
+
+```
+OEM_Werk <- import_werk("Data/Geodaten/OEM_Werke_2017-07-04_TrR.csv") 
+Tier2_werk <- import_werk("Data/Geodaten/Tier2_Werke_2017-07-11_v1.2_TrR.csv")  
+Tier1_werk <- import_werk("Data/Geodaten/Tier1_Werke_2017-07-11_v1.2_TrR.csv") 
+```
+Nach dem Einlesen der Dateien sind die Daten für eine weitere Analyse bereit.
+
+### Zulassung
+
+Für den Import der `Zulassungen_alle_Fahrzeuge.csv` Datei nutzten wir die `fread()` Funktion.
+Diese hat den Vorteil, dass sie automatisch das Symbol für `sep` "raussucht". Des weiteren haben wir `header` == TRUE gesetzt um sicher zu gehen, dass die erste Zeile übernommen und als Header gesetzt wird.
+
+```
+zulassung <- fread("Data/Zulassungen/Zulassungen_alle_Fahrzeuge.csv",header=T)
+```
+
+Anschließend wird ebenfalls die überschüssige laufende Nummerierung gelöscht und der 1. Spaltenname zu "ID" geändert.
+
+```
+zulassung <- zulassung[,-1]
+names(zulassung)[1] <- "ID"
+```
+
+Zum Schluss wird die Spalte "Zulassung" in ein Datum konvertiert um die Analyse zu erleichtern.
+
+```
+zulassung$Zulassung <- ymd(zulassung$Zulassung)
+```
+
+### Gemeinde
+
+Die Daten für die Geodaten der Gemeinden `Geodaten_Gemeinden_v1.2_2017-08-22_TrR.csv` werden, wie die der Zulassung, mittels `fread()` eingelesen:
+
+```{r}
+Geodaten_Gemeinden <- fread("Data/Geodaten/Geodaten_Gemeinden_v1.2_2017-08-22_TrR.csv",header=T)
+```
+
+Anschließend werden die beiden überflüssigen ersten Spalten gelöscht und die Reihenfolge der Spalten mit den der WOEM, Tier1 und Tier2 Daten einheitlich gemacht.
+
+```{r}
+Geodaten_Gemeinden <- Geodaten_Gemeinden[,-1:-2]
+Geodaten_Gemeinden <- Geodaten_Gemeinden[,c(1,2,4,3)]
+```
+
+Danach werden die Werte des Breitengrades vorbereitet. Dafür haben wir Funktionen folgendermaßen geschachtelt:
+
+```{r}
+Geodaten_Gemeinden$Breitengrad <- as.numeric(sub(",",".",Geodaten_Gemeinden$Breitengrad,fixed=T))
+```
+
+Dies bedeutet, dass zuerst mit `sub` die Kommatas duch Punkte ersetzt werden, damit diese anschließend als Numeric's abgespeichert werden können.
+Zum Schluss werden die Spaltennamen der 3. bis 4. Spalte noch angepasst zu "PLZ" und "Gemeinden".
+
+```{r}
+names(Geodaten_Gemeinden) <- c("PLZ","Gemeinden",names(Geodaten_Gemeinden)[3:4])
+```
+
+
+#
+
+## 4. Analyse
+### Einzelteile
+Die Daten werden zur Analyse vorbereitet. 
+Um eine durchschittliche `Fehlerhaft_Leistung` für die Bauteile zu bestimmen, muss das dritte Quantil von den fehlerhaften Bauteile der letzten 10 Jahren berechnet werden.
+Wir nehmen also an, dass ein Teil sowieso kaputt gehen kann, wenn es den Wert des 75% - Quantil überschreitet. 
+Diese werden in einem Vektor ergänzt. `c_leistung1` für die fehlerhaften Bauteile von K2LE1, `c_leistung2` für die von K2LE2.
+
+```
+c_leistung1<-c(quantile(T11f$Fehlerhaft_Fahrleistung,0.75,names=F),quantile(T14f$Fehlerhaft_Fahrleistung,0.75,names=F),quantile(T15f$Fehlerhaft_Fahrleistung,0.75,names=F))
+c_leistung2<-c(quantile(T16f$Fehlerhaft_Fahrleistung,0.75,names=F),quantile(T19f$Fehlerhaft_Fahrleistung,0.75,names=F),quantile(T20f$Fehlerhaft_Fahrleistung,0.75,names=F))
+```
+Somit wird das als obere Grenze betrachtet. Wir filtern nun die Bauteile, die im letzten Jahr (2018) kaputt gingen, 
+obwohl sie die 75% Grenze noch nicht überschritten haben. 
+
+
+```
+## K2LE1 defective parts
+T11f_2018<-prepare(T11,"2018-01-01",c_leistung1[1])   
+T14f_2018<-prepare(T14,"2018-01-01",c_leistung1[2])
+T15f_2018<-prepare(T15,"2018-01-01",c_leistung1[3])
+```
+
+```
+## K2LE2 defective parts
+T16f_2018<-prepare(T16,"2018-01-01",c_leistung2[1])
+T19f_2018<-prepare(T19,"2018-01-01",c_leistung2[2])
+T20f_2018<-prepare(T20,"2018-01-01",c_leistung2[3])
+```
+
+Nur `T19f_2018` enthält Einträge. Die Einzelbauteile T19 leben 678 Tage. Nun filtern wir die produzierten Bauteile zwischen 
+23-02-2016 (Produktionsdatum für die am 01-01-2018 fehlerhaft gemeldeten Bauteile) bis zum 19-09-2016 (Produktionsdatum von den als letztes fehlerhaft gemeldeten Bauteilen)
+```
+T19_2016<-filter(T19,Produktionsdatum >= "2016-02-23" & Produktionsdatum <= "2016-09-19")
+Anteil_T19f_2018<-(dim(T19f_2018)[1]/dim(T19_2016)[1])*100
+Anteil_T19f_10jahre<-(dim(T19f)[1]/dim(T19)[1])*100
+```
+Die fehlerhaften Bauteile T19 sind circa 5.49% von der gesamten produzierten Menge im selben Zeitraum. 
+Der Anteil fehlerhafter Bauteile beträgt in den letzen 10 Jahren 10.03%. Somit ist ein Produktionsproblem bei den 
+Bauteilen T19 ausgeschlossen. 
+
+Somit kann man schließen, dass die Lieferanten keine große Produktionsprobleme in den letzten Jahren hatten, die 
+einen direkten zusammenhang mit den Kundenreklamation haben. 
+
+
+### Analyse der Sitze
+
+Es werden nun die Sitze gefiltert, die entweder fehlerhaft sind. Die fehlerhaften Sitze werden auf Lebensdauer untersucht.
+```
+Komponente<-rbind(Komponente_K2LE1,Komponente_K2LE2)
+fehl_Komponente<-Komponente %>% filter(Fehlerhaft==1) %>%
+  mutate(Lebensdauer=Fehlerhaft_Datum-Produktionsdatum)
+
+unique(fehl_Komponente$Lebensdauer)
+```
+
+Die Fehlerhaften Sitze überleben also maximal zwei Jahren. Nach dieser Logik werden die ab dem Jahr 2016 produzierten Sitze gefiltert: 
+```
+fehl_Komponente<- fehl_Komponente %>% filter(Produktionsdatum>="2016-01-01")
+fehl_Komponente<- fehl_Komponente[,c(1,2,3,4,6)]
+names(fehl_Komponente)<-c("ID Sitz","Fhl Datum St","Fhl km St","Prod Datum St","Werk St")
+```
+
+Analog zu den Einzelteile fügen wir den Datensatz fehl_Komponente mit dem Bestandteile_Fahrzeuge für alle Type zusammen.
+Da uns nur die Sitze und die Fahrzeuge interessieren, reduzieren wir die Datensätze `Bestandteile_Fahrzeuge_x/y` auf zwei Spalten, nämlich "ID_Sitze" und "ID_Fahrzeuge"
+```
+Bestandteile_Fahrzeuge_OEM1_Typ11<-Bestandteile_Fahrzeuge_OEM1_Typ11[,c(3,5)] 
+Bestandteile_Fahrzeuge_OEM1_Typ12<-Bestandteile_Fahrzeuge_OEM1_Typ12[,c(3,5)]
+Bestandteile_Fahrzeuge_OEM2_Typ21<-Bestandteile_Fahrzeuge_OEM2_Typ21[,c(3,5)]
+Bestandteile_Fahrzeuge_OEM2_Typ22<-Bestandteile_Fahrzeuge_OEM2_Typ22[,c(3,5)]
+Bestandteile_Fahrzeuge<-rbind(Bestandteile_Fahrzeuge_OEM1_Typ11,Bestandteile_Fahrzeuge_OEM1_Typ12,Bestandteile_Fahrzeuge_OEM1_Typ21,Bestandteile_Fahrzeuge_OEM2_Typ22) #Diese werden zusammengefügt in einem Datensatz
+```
+
+Nun wird der Datensatz mit der Spalte "Fahrzeug ID" erweitert.
+```
+fehl_Komponente_Fhz<-merge(fehl_Komponente,Bestandteile_Fahrzeuge,by.x = "ID Sitz",by.y = "ID_Sitze")
+```
+Die Datensätze Fahrzeuge_OEMx_Typxy werden reduziert, da wir nur Werksnummer brauchen, die restlichen Informationen sind für unsere Analyse nicht relevant.
+```
+Fahrzeuge_OEM1_Typ11<-Fahrzeuge_OEM1_Typ11[,c(1,6)]
+Fahrzeuge_OEM1_Typ12<-Fahrzeuge_OEM1_Typ12[,c(1,6)]
+Fahrzeuge_OEM2_Typ21<-Fahrzeuge_OEM2_Typ21[,c(1,6)]
+Fahrzeuge_OEM2_Typ22<-Fahrzeuge_OEM2_Typ22[,c(1,6)]
+Fahrzeuge<-rbind(Fahrzeuge_OEM1_Typ11,Fahrzeuge_OEM1_Typ12,Fahrzeuge_OEM2_Typ21,Fahrzeuge_OEM2_Typ22)
+```
+Analog werden die Fahrzeuglisten zusammengefügt.
+Der Datensatz wird erneut erweitert
+```
+Komponente_Fahrzeug<-merge(fehl_Komponente_Fhz,Fahrzeuge,by.x="ID_Fahrzeug",by.y="ID") 
+```
+
+
+Wir brauchen nun die Zulassungsdaten, diese werden in unseren Datensatz eingetragen.
+```
+zu_Komponente_Fahrzeug<-merge(Komponente_Fahrzeug,zulassung,by.x="ID_Fahrzeug",by.y="ID")
+```
+Nun fügen wir die Geodaten hinzu, und somit haben wir einen fertigen Datensatz, den wir in die Shinyapp einführen können.
+```
+Finaler_Datensatz<-merge(zu_Komponente_Fahrzeug,,by = "Gemeinden")
+```
+```{r include=F}
+Finaler_Datensatz<-as.data.frame(readRDS("Finaler_Datensatz_26.RData"))
+```
+```{r}
+head(Finaler_Datensatz)
+```
+
+#### Analyse 
+
+Wir werden nun den Anteil der fehlerhaften Merkmale (Sitz,Fahrzeug) pro Werk bestimmen.
+87,7% der fehlerhaften Fahrzeuge wurden im Werk 1111 produziert, ungefähr 88% der zugelassenen Fahrzeuge die einen fehlerhaften Sitz haben, sind von der Marke 1 
+Es wird also weiter gefiltert, das ist nun unser finaler Datenstaz
+```{r}
+Finaler_Datensatz<-filter(Finaler_Datensatz,(`Werk St`==1111 & (Werksnummer==11 | Werksnummer==12)))
+```
+
+Um die betroffenen Gemeinden besser zu erkennen, erstellen wir eine Heatmap die den Zulassungsdatumsverlauf der betroffenen Fahrzeuge in jede Gemeinde darstellt.
+```{r include=F}
+heatmap1<-readRDS("Zusätzliche Dateien/heatmap.RData")
+```
+
+```{r warning=F}
+plot_ly(x=colnames(heatmap1), y=rownames(heatmap1), z = heatmap1 , type = "heatmap",color = "Grey")
+```
+
+
+Die am betroffenen Gemeinden sind:
+```{r include=F}
+bet_Gemeinden<-as.data.frame(table(Finaler_Datensatz$Gemeinden))
+bet_Gemeinden<-arrange(bet_Gemeinden,-Freq)
+
+```
+```{r }
+head(bet_Gemeinden)
+```
+Köln ist offenbar sehr betroffen, sowie Dortmund, Dresden und Leipzig.
+Am Tag 21.Oktober sieht man dass es viele Fälle gibt, 21 Juli und 21 April auch. 
+Die betroffenen Sitze wurden im Werk 1111 in Dortmund gebaut. 
